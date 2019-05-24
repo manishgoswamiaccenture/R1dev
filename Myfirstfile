@@ -1,0 +1,68 @@
+/*
+   @Author          CloudSense
+   @Name            CreateCEActionHandler
+   @CreateDate      25/06/2017
+   @Description     This class is responsible for initiating the Credit Exception ACtion record case of Credit check failure on Order NAV SYNC
+   @Version         1.1
+ 
+*/
+
+global class CreateCEActionHandler implements CSPOFA.ExecutionHandler{
+    
+    /**
+    * @Author       CloudSense
+    * @Name         execute
+    * @Date         02/09/2017
+    * @Description  Method to process the step and and call Credit Exception Outbound service
+    * @Param        list<SObject>
+    * @return       NA
+    */  
+    public List<sObject> process(List<SObject> data)
+    {
+       
+        List<sObject> result = new List<sObject>();
+        List<EP_Action__c> crList = new List<EP_Action__c>();
+        //collect the data for all steps passed in, if needed
+        List<CSPOFA__Orchestration_Step__c> stepList= (List<CSPOFA__Orchestration_Step__c>)data;
+        
+        List<CSPOFA__Orchestration_Step__c> extendedList = [Select
+                                                                id,CSPOFA__Orchestration_Process__r.Order__c,CSPOFA__Orchestration_Process__r.Order__r.csord__Account__c,CSPOFA__Status__c,CSPOFA__Completed_Date__c,CSPOFA__Message__c,CSPOFA__Orchestration_Process__r.Order__r.csord__Account__r.OwnerId     
+                                                            from 
+                                                                CSPOFA__Orchestration_Step__c 
+                                                            where 
+                                                            id in :stepList];
+                                                            
+         if (!extendedList.isEmpty()) {
+              
+            Id recordTypeId = Schema.SObjectType.EP_Action__c.getRecordTypeInfosByName()
+                  .get(EP_Common_Constant.ERP_CREDIT_CHECK_ERROR).getRecordTypeId();    
+            for(CSPOFA__Orchestration_Step__c step:extendedList){
+           
+                EP_Action__c ceAction = new EP_Action__c();
+                ceAction.EP_Account__c = step.CSPOFA__Orchestration_Process__r.Order__r.csord__Account__c;
+                ceAction.EP_CSOrder__c = step.CSPOFA__Orchestration_Process__r.Order__c;
+                ceAction.EP_Status__c =EP_Common_Constant.ACT_NEW_STATUS;
+                ceAction.RecordTypeId = recordTypeId;
+                ceAction.EP_Action_Name__c = EP_Common_Constant.ERP_CREDIT_CHECK_ERROR;
+                ceAction.OwnerId =step.CSPOFA__Orchestration_Process__r.Order__r.csord__Account__r.OwnerId;
+                crList.add(ceAction);   
+                //mark step Status, Completed Date, and write optional step Message
+                step.CSPOFA__Status__c ='Complete';
+                step.CSPOFA__Completed_Date__c=Date.today();
+                step.CSPOFA__Message__c = 'Custom step succeeded';
+                result.add(step);
+               }
+           } 
+     
+      //try{
+            
+            if(!crList.isEmpty()){
+                
+                database.insert(crList);
+            }
+        //}Catch(Exception exp){
+          //EP_loggingService.loghandledException(exp, EP_Common_Constant.EPUMA, 'process', 'CreateCEActionHandler',apexPages.severity.ERROR);
+        //}
+      return result; 
+   }
+}
